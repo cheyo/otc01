@@ -328,3 +328,96 @@ async def graph_overview(limit: int = 80):
     row = result[0]
     edges = [r for r in row.get("rels", []) if r]
     return {"nodes": row.get("nodes", []), "edges": edges}
+
+# =========================
+# v2 O2C + R2R APIs
+# =========================
+def run_sql_v2(query: str, parameters: tuple = ()) -> List[Dict]:
+    cfg = dict(MYSQL_CONFIG)
+    cfg['database'] = 'otc_kg_v2'
+    conn = mysql.connector.connect(**cfg)
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(query, parameters)
+        return cursor.fetchall()
+    finally:
+        conn.close()
+
+@app.get('/stats/v2')
+async def stats_v2():
+    mysql_stats = {
+        'customers': run_sql_v2('SELECT COUNT(*) c FROM HZ_CUST_ACCOUNTS')[0]['c'],
+        'orders': run_sql_v2('SELECT COUNT(*) c FROM OE_ORDER_HEADERS_ALL')[0]['c'],
+        'invoices': run_sql_v2('SELECT COUNT(*) c FROM RA_CUSTOMER_TRX_ALL')[0]['c'],
+        'receipts': run_sql_v2('SELECT COUNT(*) c FROM AR_CASH_RECEIPTS_ALL')[0]['c'],
+        'xla_entries': run_sql_v2('SELECT COUNT(*) c FROM XLA_AE_HEADERS')[0]['c'],
+        'journal_entries': run_sql_v2('SELECT COUNT(*) c FROM GL_JE_HEADERS')[0]['c'],
+        'balances': run_sql_v2('SELECT COUNT(*) c FROM GL_BALANCES')[0]['c'],
+    }
+    neo4j_stats = run_cypher('MATCH (n) RETURN labels(n)[0] AS label, count(*) AS cnt ORDER BY label')
+    return {'mysql': mysql_stats, 'neo4j': neo4j_stats}
+
+@app.get('/query/o2c-r2r/trace')
+async def query_o2c_r2r_trace(limit: int = 20):
+    sql = """
+    SELECT c.account_name AS customer_name,
+           o.order_number,
+           i.trx_number,
+           x.ae_header_id,
+           j.je_header_id,
+           gcc.segment3_account AS gl_account,
+           j.period_name
+    FROM OE_ORDER_HEADERS_ALL o
+    JOIN HZ_CUST_ACCOUNTS c ON o.sold_to_org_id = c.cust_account_id
+    JOIN INVOICE_ORDER_LINK iol ON iol.header_id = o.header_id
+    JOIN RA_CUSTOMER_TRX_LINES_ALL itl ON iol.customer_trx_line_id = itl.customer_trx_line_id
+    JOIN RA_CUSTOMER_TRX_ALL i ON itl.customer_trx_id = i.customer_trx_id
+    JOIN XLA_AE_HEADERS x ON x.source_id = i.customer_trx_id AND x.entity_code='RA_CUSTOMER_TRX'
+    JOIN GL_IMPORT_REFERENCES gir ON gir.ae_header_id = x.ae_header_id
+    JOIN GL_JE_HEADERS j ON gir.je_header_id = j.je_header_id
+    JOIN GL_JE_LINES gjl ON gjl.je_header_id = j.je_header_id
+    JOIN GL_CODE_COMBINATIONS gcc ON gjl.code_combination_id = gcc.code_combination_id
+    ORDER BY o.header_id, i.customer_trx_id
+    LIMIT %s
+    """
+    data = run_sql_v2(sql, (limit,))
+    return {'success': True, 'message': '标准版 O2C-R2R 穿透查询完成', 'data': data}
+
+@app.get('/query/gl-impact')
+async def query_gl_impact(limit: int = 20):
+    sql = """
+    SELECT i.trx_number,
+           j.je_header_id,
+           gcc.segment3_account AS gl_account,
+           gjl.accounted_dr,
+           gjl.accounted_cr,
+           j.period_name
+    FROM RA_CUSTOMER_TRX_ALL i
+    JOIN XLA_AE_HEADERS x ON x.source_id = i.customer_trx_id AND x.entity_code='RA_CUSTOMER_TRX'
+    JOIN GL_IMPORT_REFERENCES gir ON gir.ae_header_id = x.ae_header_id
+    JOIN GL_JE_HEADERS j ON gir.je_header_id = j.je_header_id
+    JOIN GL_JE_LINES gjl ON gjl.je_header_id = j.je_header_id
+    JOIN GL_CODE_COMBINATIONS gcc ON gjl.code_combination_id = gcc.code_combination_id
+    ORDER BY i.customer_trx_id
+    LIMIT %s
+    """
+    data = run_sql_v2(sql, (limit,))
+    return {'success': True, 'message': '发票到总账影响查询完成', 'data': data}
+
+@app.get('/graph/overview/v2')
+async def graph_overview_v2(limit: int = 120):
+    cypher = """
+    MATCH p=(c:CustomerAccount)-[:PLACED_ORDER]->(o:SalesOrder)-[:BILLED_AS]->(i:Invoice)-[:ACCOUNTED_AS]->(x:SubledgerEntry)-[:POSTED_TO]->(j:JournalEntry)-[:HITS_ACCOUNT]->(g:GLAccount)
+    WITH collect(p)[0..$limit] AS paths
+    UNWIND paths AS p
+    UNWIND nodes(p) AS n
+    WITH collect(DISTINCT n) AS nodes, paths
+    UNWIND paths AS p2
+    UNWIND relationships(p2) AS r
+    RETURN [n IN nodes | {id: coalesce(n.id, id(n)), label: labels(n)[0], name: coalesce(n.name, n.order_number, n.trx_number, n.account, toString(coalesce(n.id,id(n)))), props: properties(n)}] AS nodes,
+           collect(DISTINCT {source: startNode(r).id, target: endNode(r).id, type: type(r)}) AS edges
+    """
+    result = run_cypher(cypher, {'limit': limit})
+    if not result:
+        return {'nodes': [], 'edges': []}
+    return {'nodes': result[0].get('nodes', []), 'edges': result[0].get('edges', [])}
