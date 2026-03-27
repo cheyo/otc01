@@ -1,0 +1,6 @@
+inventory_org_id,org_code,org_name,org_type
+1,INV001,库存组织1,WAREHOUSE
+2,INV002,库存组织2,WAREHOUSE
+3,INV003,库存组织3,WAREHOUSE
+4,INV004,库存组织4,WAREHOUSE
+5,INV005,库存组织5,WAREHOUSE

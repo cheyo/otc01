@@ -1,0 +1,6 @@
+code_combination_id,segment1_company,segment2_department,segment3_account,segment4_product,segment5_intercompany,enabled_flag
+1,100,11,1001,000,000,Y
+2,100,12,1122,000,000,Y
+3,100,13,6001,000,000,Y
+4,100,14,2221,000,000,Y
+5,100,15,1405,000,000,Y

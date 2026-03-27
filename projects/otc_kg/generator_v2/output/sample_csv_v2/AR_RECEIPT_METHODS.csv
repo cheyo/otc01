@@ -1,0 +1,4 @@
+receipt_method_id,receipt_method_name,method_type
+1,BANK_TRANSFER,BANK
+2,CHEQUE,OFFLINE
+3,LOCKBOX,AUTO

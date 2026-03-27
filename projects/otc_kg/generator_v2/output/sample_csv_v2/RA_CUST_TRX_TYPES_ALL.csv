@@ -1,0 +1,4 @@
+cust_trx_type_id,trx_type_name,trx_class,accounting_affect_flag
+1,INV_STANDARD,INV,Y
+2,INV_EXPORT,INV,Y
+3,CM_STANDARD,CM,Y
