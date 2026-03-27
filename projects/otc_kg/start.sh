@@ -16,8 +16,7 @@ cd "$ROOT/backend"
 nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 >/tmp/otc_backend.log 2>&1 &
 echo $! > "$BACKEND_PID_FILE"
 
-cd "$ROOT/frontend"
-nohup python3 -m http.server 8080 --bind 0.0.0.0 >/tmp/otc_frontend.log 2>&1 &
+nohup python3 -m http.server 8080 --bind 0.0.0.0 --directory "$ROOT/frontend" >/tmp/otc_frontend.log 2>&1 &
 echo $! > "$FRONTEND_PID_FILE"
 
 echo "Backend:  http://0.0.0.0:8000"
