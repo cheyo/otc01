@@ -1,209 +1,98 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OTC风险知识图谱分析平台</title>
-    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f5f7fa; }
-        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%); color: white; padding: 24px; border-radius: 12px; margin-bottom: 24px; }
-        .header h1 { font-size: 28px; margin-bottom: 8px; }
-        .header p { opacity: 0.9; }
-        .card { background: white; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); padding: 20px; margin-bottom: 20px; }
-        .card-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #333; border-bottom: 1px solid #eee; padding-bottom: 12px; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-        .stat-item { background: #f8fafc; padding: 16px; border-radius: 8px; text-align: center; }
-        .stat-value { font-size: 28px; font-weight: 700; color: #1a73e8; }
-        .stat-label { color: #666; margin-top: 4px; }
-        .query-buttons { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
-        .btn { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
-        .btn-primary { background: #1a73e8; color: white; }
-        .btn-primary:hover { background: #1557b0; }
-        .btn-secondary { background: #e8f0fe; color: #1a73e8; }
-        .btn-secondary:hover { background: #d2e3fc; }
-        .btn.active { background: #0d47a1; color: white; }
-        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-        th { background: #f8fafc; font-weight: 600; color: #333; }
-        tr:hover { background: #f8fafc; }
-        .loading { text-align: center; padding: 40px; color: #666; }
-        .error { color: #dc2626; padding: 12px; background: #fef2f2; border-radius: 6px; }
-        .success { color: #059669; padding: 12px; background: #ecfdf5; border-radius: 6px; margin-bottom: 16px; }
-        .query-input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; margin-bottom: 12px; }
-        .result-count { color: #666; margin-bottom: 12px; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OTC风险知识图谱分析平台</title>
+  <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <style>
+    *{box-sizing:border-box} body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:#f5f7fa;margin:0}
+    .container{max-width:1400px;margin:0 auto;padding:20px}.header{background:linear-gradient(135deg,#1a73e8,#0d47a1);color:#fff;padding:24px;border-radius:12px;margin-bottom:24px}
+    .card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:20px;margin-bottom:20px}.card-title{font-size:18px;font-weight:600;margin-bottom:16px;border-bottom:1px solid #eee;padding-bottom:12px}
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px}.stat-item{background:#f8fafc;padding:16px;border-radius:8px;text-align:center}.stat-value{font-size:28px;font-weight:700;color:#1a73e8}
+    .btn{padding:10px 18px;border:none;border-radius:6px;cursor:pointer;font-size:14px}.btn-primary{background:#1a73e8;color:#fff}.btn.active{background:#0d47a1;color:#fff}.query-buttons{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+    table{width:100%;border-collapse:collapse;margin-top:16px}th,td{padding:10px;text-align:left;border-bottom:1px solid #eee}th{background:#f8fafc}.error{color:#dc2626;padding:12px;background:#fef2f2;border-radius:6px}.success{color:#059669;padding:12px;background:#ecfdf5;border-radius:6px}
+    .nl-box{background:#f0f7ff;border:1px solid #d2e3fc;border-radius:8px;padding:16px}.nl-input,.query-input{width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:12px}.intent{display:inline-block;background:#1a73e8;color:#fff;padding:4px 10px;border-radius:999px;font-size:12px;margin-bottom:10px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:20px}.muted{color:#666}.tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.tag{background:#e8f0fe;color:#1a73e8;padding:6px 10px;border-radius:999px;font-size:12px;cursor:pointer}
+    @media (max-width:900px){.row{grid-template-columns:1fr}}
+  </style>
 </head>
 <body>
-    <div id="app" class="container">
-        <div class="header">
-            <h1>OTC风险知识图谱分析平台</h1>
-            <p>Oracle ETRM OTC流程风险挖掘系统 - 基于知识图谱的财务风险识别</p>
+<div id="app" class="container">
+  <div class="header">
+    <h1>OTC风险知识图谱分析平台</h1>
+    <p>Oracle ETRM OTC流程 · MySQL + Neo4j + FastAPI + 自然语言查询</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">系统概览</div>
+    <div class="stats-grid">
+      <div class="stat-item"><div class="stat-value">{{stats.customers}}</div><div>客户数量</div></div>
+      <div class="stat-item"><div class="stat-value">{{stats.orders}}</div><div>销售订单</div></div>
+      <div class="stat-item"><div class="stat-value">{{stats.invoices}}</div><div>发票数量</div></div>
+      <div class="stat-item"><div class="stat-value">{{stats.receipts}}</div><div>收款记录</div></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <div class="card-title">自然语言风险查询</div>
+      <div class="nl-box">
+        <input class="nl-input" v-model="nlQuery" @keyup.enter="runNLQuery" placeholder="例如：查一下共享银行账户的客户 / 看看逾期超过90天的应收 / 折扣超过20%的订单" />
+        <button class="btn btn-primary" @click="runNLQuery">执行自然语言查询</button>
+        <div v-if="nlError" class="error" style="margin-top:12px">{{nlError}}</div>
+        <div v-if="nlResult" style="margin-top:12px">
+          <div v-if="nlResult.intent" class="intent">{{nlResult.description}} · 置信度 {{Math.round(nlResult.confidence*100)}}%</div>
+          <div class="success">{{nlResult.natural_response}}</div>
+          <div v-if="nlResult.suggestions && nlResult.suggestions.length" class="tags">
+            <span class="tag" v-for="s in nlResult.suggestions" :key="s" @click="nlQuery=s;runNLQuery()">{{s}}</span>
+          </div>
         </div>
-
-        <div class="card">
-            <div class="card-title">系统概览</div>
-            <div class="stats-grid">
-                <div class="stat-item">
-                    <div class="stat-value">{{ stats.customers || 0 }}</div>
-                    <div class="stat-label">客户数量</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value">{{ stats.orders || 0 }}</div>
-                    <div class="stat-label">销售订单</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value">{{ stats.invoices || 0 }}</div>
-                    <div class="stat-label">发票数量</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value">{{ stats.receipts || 0 }}</div>
-                    <div class="stat-label">收款记录</div>
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-title">风险分析查询</div>
-            <div class="query-buttons">
-                <button class="btn" :class="{'active': currentQuery==='shared_bank_accounts'}" @click="runQuery('shared_bank_accounts')">共享银行账户</button>
-                <button class="btn" :class="{'active': currentQuery==='high_overdue'}" @click="runQuery('high_overdue')">高逾期应收</button>
-                <button class="btn" :class="{'active': currentQuery==='high_risk_orders'}" @click="runQuery('high_risk_orders')">高风险订单</button>
-                <button class="btn" :class="{'active': currentQuery==='high_discount'}" @click="runQuery('high_discount')">大额折扣</button>
-                <button class="btn" :class="{'active': currentQuery==='uninvoiced_shipments'}" @click="runQuery('uninvoiced_shipments')">未开票发货</button>
-                <button class="btn" :class="{'active': currentQuery==='exceed_credit'}" @click="runQuery('exceed_credit')">超信用订单</button>
-                <button class="btn" :class="{'active': currentQuery==='approval_chain'}" @click="runQuery('approval_chain')">审批链路</button>
-            </div>
-
-            <div v-if="loading" class="loading">查询中...</div>
-            <div v-if="error" class="error">{{ error }}</div>
-            <div v-if="success" class="success">{{ success }}</div>
-
-            <div v-if="results.length > 0">
-                <div class="result-count">共找到 {{ results.length }} 条记录</div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th v-for="(value, key) in results[0]" :key="key">{{ key }}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="(row, index) in results" :key="index">
-                            <td v-for="(value, key) in row" :key="key">{{ value }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-title">自定义查询（Cypher）</div>
-            <textarea class="query-input" v-model="customQuery" rows="4" placeholder="输入Cypher查询语句..."></textarea>
-            <button class="btn btn-primary" @click="runCustomQuery">执行查询</button>
-            <div v-if="customResults.length > 0" style="margin-top: 16px;">
-                <div class="result-count">共找到 {{ customResults.length }} 条记录</div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th v-for="(value, key) in customResults[0]" :key="key">{{ key }}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="(row, index) in customResults" :key="index">
-                            <td v-for="(value, key) in row" :key="key">{{ value }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+      </div>
     </div>
 
-    <script>
-        const { createApp, ref, onMounted } = Vue;
-        const API_BASE = 'http://localhost:8000';
+    <div class="card">
+      <div class="card-title">预定义风险查询</div>
+      <div class="query-buttons">
+        <button class="btn" :class="{active:currentQuery==='shared_bank_accounts'}" @click="runQuery('shared_bank_accounts')">共享银行账户</button>
+        <button class="btn" :class="{active:currentQuery==='high_overdue'}" @click="runQuery('high_overdue')">高逾期应收</button>
+        <button class="btn" :class="{active:currentQuery==='high_risk_orders'}" @click="runQuery('high_risk_orders')">高风险订单</button>
+        <button class="btn" :class="{active:currentQuery==='high_discount'}" @click="runQuery('high_discount')">大额折扣</button>
+        <button class="btn" :class="{active:currentQuery==='uninvoiced_shipments'}" @click="runQuery('uninvoiced_shipments')">未开票发货</button>
+        <button class="btn" :class="{active:currentQuery==='exceed_credit'}" @click="runQuery('exceed_credit')">超信用订单</button>
+      </div>
+      <div class="muted">点击按钮直接执行图谱风险查询。</div>
+    </div>
+  </div>
 
-        createApp({
-            setup() {
-                const stats = ref({ customers: 1000, orders: 3000, invoices: 4943, receipts: 4943 });
-                const currentQuery = ref('');
-                const loading = ref(false);
-                const error = ref('');
-                const success = ref('');
-                const results = ref([]);
-                const customQuery = ref('');
-                const customResults = ref([]);
+  <div class="card">
+    <div class="card-title">查询结果</div>
+    <div v-if="error" class="error">{{error}}</div>
+    <div v-if="success" class="success">{{success}}</div>
+    <div v-if="results.length===0" class="muted">暂无结果</div>
+    <table v-else>
+      <thead><tr><th v-for="(v,k) in results[0]" :key="k">{{k}}</th></tr></thead>
+      <tbody><tr v-for="(row,idx) in results" :key="idx"><td v-for="(v,k) in row" :key="k">{{v}}</td></tr></tbody>
+    </table>
+  </div>
 
-                const loadStats = async () => {
-                    try {
-                        const res = await axios.get(`${API_BASE}/stats`);
-                        const neo4jStats = res.data.neo4j || [];
-                        const statMap = {};
-                        neo4jStats.forEach(s => {
-                            if (s.label === 'CustomerAccount') statMap.customers = s.cnt;
-                            if (s.label === 'SalesOrder') statMap.orders = s.cnt;
-                            if (s.label === 'Invoice') statMap.invoices = s.cnt;
-                            if (s.label === 'CashReceipt') statMap.receipts = s.cnt;
-                        });
-                        stats.value = { ...stats.value, ...statMap };
-                    } catch (e) {
-                        console.error('Failed to load stats:', e);
-                    }
-                };
-
-                const runQuery = async (queryType) => {
-                    currentQuery.value = queryType;
-                    loading.value = true;
-                    error.value = '';
-                    success.value = '';
-                    results.value = [];
-
-                    try {
-                        const res = await axios.post(`${API_BASE}/query/risk`, {
-                            query_type: queryType,
-                            parameters: { limit: 20 }
-                        });
-                        if (res.data.success) {
-                            results.value = res.data.data;
-                            success.value = res.data.message;
-                        } else {
-                            error.value = res.data.message;
-                        }
-                    } catch (e) {
-                        error.value = '查询失败: ' + (e.response?.data?.detail || e.message);
-                    } finally {
-                        loading.value = false;
-                    }
-                };
-
-                const runCustomQuery = async () => {
-                    if (!customQuery.value.trim()) {
-                        error.value = '请输入查询语句';
-                        return;
-                    }
-                    loading.value = true;
-                    error.value = '';
-                    try {
-                        const res = await axios.post(`${API_BASE}/query/custom?query=${encodeURIComponent(customQuery.value)}`);
-                        if (res.data.success) {
-                            customResults.value = res.data.data;
-                        } else {
-                            error.value = res.data.message;
-                        }
-                    } catch (e) {
-                        error.value = '查询失败: ' + (e.response?.data?.detail || e.message);
-                    } finally {
-                        loading.value = false;
-                    }
-                };
-
-                onMounted(loadStats);
-
-                return { stats, currentQuery, loading, error, success, results, customQuery, customResults, runQuery, runCustomQuery };
-            }
-        }).mount('#app');
-    </script>
+  <div class="card">
+    <div class="card-title">自定义 Cypher 查询</div>
+    <textarea class="query-input" rows="5" v-model="customQuery" placeholder="MATCH (c:CustomerAccount)-[:PLACED_ORDER]->(o:SalesOrder) RETURN c.account_name,o.order_number LIMIT 10"></textarea>
+    <button class="btn btn-primary" @click="runCustomQuery">执行 Cypher</button>
+  </div>
+</div>
+<script>
+const {createApp,ref,onMounted}=Vue; const API='http://localhost:8000';
+createApp({setup(){
+ const stats=ref({customers:0,orders:0,invoices:0,receipts:0}); const currentQuery=ref(''); const results=ref([]); const error=ref(''); const success=ref(''); const nlQuery=ref('查一下共享银行账户的客户'); const nlResult=ref(null); const nlError=ref(''); const customQuery=ref('MATCH (a:CustomerAccount)-[:SHARES_BANK_ACCOUNT_WITH]->(b:CustomerAccount) RETURN a.account_name,b.account_name LIMIT 10');
+ const loadStats=async()=>{try{const r=await axios.get(`${API}/stats`); const map={}; (r.data.neo4j||[]).forEach(s=>{if(s.label==='CustomerAccount')map.customers=s.cnt; if(s.label==='SalesOrder')map.orders=s.cnt; if(s.label==='Invoice')map.invoices=s.cnt; if(s.label==='CashReceipt')map.receipts=s.cnt;}); stats.value={...stats.value,...map};}catch(e){}};
+ const runQuery=async(type)=>{currentQuery.value=type; error.value=''; success.value=''; try{const r=await axios.post(`${API}/query/risk`,{query_type:type,parameters:{limit:20}}); if(r.data.success){results.value=r.data.data; success.value=r.data.message;} else error.value=r.data.message;}catch(e){error.value='查询失败: '+(e.response?.data?.detail||e.message)}};
+ const runNLQuery=async()=>{nlError.value=''; nlResult.value=null; error.value=''; success.value=''; try{const r=await axios.post(`${API}/query/natural`,{query:nlQuery.value}); nlResult.value=r.data; results.value=r.data.data||[]; success.value=r.data.natural_response||'';}catch(e){nlError.value='自然语言查询失败: '+(e.response?.data?.detail||e.message)}};
+ const runCustomQuery=async()=>{error.value=''; success.value=''; try{const r=await axios.post(`${API}/query/custom?query=${encodeURIComponent(customQuery.value)}`); if(r.data.success){results.value=r.data.data; success.value='自定义查询执行成功';} else error.value=r.data.message;}catch(e){error.value='自定义查询失败: '+(e.response?.data?.detail||e.message)}};
+ onMounted(loadStats); return {stats,currentQuery,results,error,success,nlQuery,nlResult,nlError,customQuery,runQuery,runNLQuery,runCustomQuery};
+}}).mount('#app');
+</script>
 </body>
 </html>
