@@ -406,18 +406,23 @@ async def query_gl_impact(limit: int = 20):
 
 @app.get('/graph/overview/v2')
 async def graph_overview_v2(limit: int = 120):
-    cypher = """
-    MATCH p=(c:CustomerAccount)-[:PLACED_ORDER]->(o:SalesOrder)-[:BILLED_AS]->(i:Invoice)-[:ACCOUNTED_AS]->(x:SubledgerEntry)-[:POSTED_TO]->(j:JournalEntry)-[:HITS_ACCOUNT]->(g:GLAccount)
-    WITH collect(p)[0..$limit] AS paths
-    UNWIND paths AS p
-    UNWIND nodes(p) AS n
-    WITH collect(DISTINCT n) AS nodes, paths
-    UNWIND paths AS p2
-    UNWIND relationships(p2) AS r
-    RETURN [n IN nodes | {id: coalesce(n.id, id(n)), label: labels(n)[0], name: coalesce(n.name, n.order_number, n.trx_number, n.account, toString(coalesce(n.id,id(n)))), props: properties(n)}] AS nodes,
-           collect(DISTINCT {source: startNode(r).id, target: endNode(r).id, type: type(r)}) AS edges
-    """
-    result = run_cypher(cypher, {'limit': limit})
-    if not result:
-        return {'nodes': [], 'edges': []}
-    return {'nodes': result[0].get('nodes', []), 'edges': result[0].get('edges', [])}
+    nodes = run_cypher("""
+    MATCH (c:CustomerAccount)-[:PLACED_ORDER]->(o:SalesOrder)-[:BILLED_AS]->(i:Invoice)-[:ACCOUNTED_AS]->(x:SubledgerEntry)-[:POSTED_TO]->(j:JournalEntry)-[:HITS_ACCOUNT]->(g:GLAccount)
+    WITH collect(DISTINCT c)+collect(DISTINCT o)+collect(DISTINCT i)+collect(DISTINCT x)+collect(DISTINCT j)+collect(DISTINCT g) AS ns
+    UNWIND ns[0..$limit] AS n
+    RETURN coalesce(n.id, id(n)) AS id,
+           labels(n)[0] AS label,
+           coalesce(n.name, n.order_number, n.trx_number, n.account, toString(coalesce(n.id,id(n)))) AS name,
+           properties(n) AS props
+    """, {'limit': limit})
+    edges = run_cypher("""
+    MATCH (c:CustomerAccount)-[r1:PLACED_ORDER]->(o:SalesOrder)-[r2:BILLED_AS]->(i:Invoice)-[r3:ACCOUNTED_AS]->(x:SubledgerEntry)-[r4:POSTED_TO]->(j:JournalEntry)-[r5:HITS_ACCOUNT]->(g:GLAccount)
+    WITH collect(DISTINCT {source:c.id,target:o.id,type:type(r1)})+
+         collect(DISTINCT {source:o.id,target:i.id,type:type(r2)})+
+         collect(DISTINCT {source:i.id,target:x.id,type:type(r3)})+
+         collect(DISTINCT {source:x.id,target:j.id,type:type(r4)})+
+         collect(DISTINCT {source:j.id,target:g.id,type:type(r5)}) AS es
+    UNWIND es[0..$limit] AS e
+    RETURN e.source AS source, e.target AS target, e.type AS type
+    """, {'limit': limit})
+    return {'nodes': nodes, 'edges': edges}
