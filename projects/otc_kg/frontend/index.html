@@ -84,7 +84,7 @@
   </div>
 </div>
 <script>
-const {createApp,ref,onMounted}=Vue; const API='http://localhost:8000';
+const {createApp,ref,onMounted}=Vue; const API=`${window.location.protocol}//${window.location.hostname}:8000`; 
 createApp({setup(){
  const stats=ref({customers:0,orders:0,invoices:0,receipts:0}); const currentQuery=ref(''); const results=ref([]); const error=ref(''); const success=ref(''); const nlQuery=ref('查一下共享银行账户的客户'); const nlResult=ref(null); const nlError=ref(''); const customQuery=ref('MATCH (a:CustomerAccount)-[:SHARES_BANK_ACCOUNT_WITH]->(b:CustomerAccount) RETURN a.account_name,b.account_name LIMIT 10');
  const loadStats=async()=>{try{const r=await axios.get(`${API}/stats`); const map={}; (r.data.neo4j||[]).forEach(s=>{if(s.label==='CustomerAccount')map.customers=s.cnt; if(s.label==='SalesOrder')map.orders=s.cnt; if(s.label==='Invoice')map.invoices=s.cnt; if(s.label==='CashReceipt')map.receipts=s.cnt;}); stats.value={...stats.value,...map};}catch(e){}};
