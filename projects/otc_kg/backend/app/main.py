@@ -405,24 +405,60 @@ async def query_gl_impact(limit: int = 20):
     return {'success': True, 'message': '发票到总账影响查询完成', 'data': data}
 
 @app.get('/graph/overview/v2')
-async def graph_overview_v2(limit: int = 120):
-    nodes = run_cypher("""
-    MATCH (c:CustomerAccount)-[:PLACED_ORDER]->(o:SalesOrder)-[:BILLED_AS]->(i:Invoice)-[:ACCOUNTED_AS]->(x:SubledgerEntry)-[:POSTED_TO]->(j:JournalEntry)-[:HITS_ACCOUNT]->(g:GLAccount)
-    WITH collect(DISTINCT c)+collect(DISTINCT o)+collect(DISTINCT i)+collect(DISTINCT x)+collect(DISTINCT j)+collect(DISTINCT g) AS ns
-    UNWIND ns[0..$limit] AS n
-    RETURN coalesce(n.id, id(n)) AS id,
-           labels(n)[0] AS label,
-           coalesce(n.name, n.order_number, n.trx_number, n.account, toString(coalesce(n.id,id(n)))) AS name,
-           properties(n) AS props
-    """, {'limit': limit})
-    edges = run_cypher("""
-    MATCH (c:CustomerAccount)-[r1:PLACED_ORDER]->(o:SalesOrder)-[r2:BILLED_AS]->(i:Invoice)-[r3:ACCOUNTED_AS]->(x:SubledgerEntry)-[r4:POSTED_TO]->(j:JournalEntry)-[r5:HITS_ACCOUNT]->(g:GLAccount)
-    WITH collect(DISTINCT {source:c.id,target:o.id,type:type(r1)})+
-         collect(DISTINCT {source:o.id,target:i.id,type:type(r2)})+
-         collect(DISTINCT {source:i.id,target:x.id,type:type(r3)})+
-         collect(DISTINCT {source:x.id,target:j.id,type:type(r4)})+
-         collect(DISTINCT {source:j.id,target:g.id,type:type(r5)}) AS es
-    UNWIND es[0..$limit] AS e
-    RETURN e.source AS source, e.target AS target, e.type AS type
-    """, {'limit': limit})
-    return {'nodes': nodes, 'edges': edges}
+async def graph_overview_v2(limit: int = 30):
+    sql = """
+    SELECT c.cust_account_id AS customer_id,
+           c.account_name AS customer_name,
+           o.header_id AS order_id,
+           o.order_number,
+           i.customer_trx_id AS invoice_id,
+           i.trx_number,
+           x.ae_header_id,
+           j.je_header_id,
+           gcc.code_combination_id,
+           gcc.segment3_account AS gl_account
+    FROM OE_ORDER_HEADERS_ALL o
+    JOIN HZ_CUST_ACCOUNTS c ON o.sold_to_org_id = c.cust_account_id
+    JOIN INVOICE_ORDER_LINK iol ON iol.header_id = o.header_id
+    JOIN RA_CUSTOMER_TRX_LINES_ALL itl ON iol.customer_trx_line_id = itl.customer_trx_line_id
+    JOIN RA_CUSTOMER_TRX_ALL i ON itl.customer_trx_id = i.customer_trx_id
+    JOIN XLA_AE_HEADERS x ON x.source_id = i.customer_trx_id AND x.entity_code='RA_CUSTOMER_TRX'
+    JOIN GL_IMPORT_REFERENCES gir ON gir.ae_header_id = x.ae_header_id
+    JOIN GL_JE_HEADERS j ON gir.je_header_id = j.je_header_id
+    JOIN GL_JE_LINES gjl ON gjl.je_header_id = j.je_header_id
+    JOIN GL_CODE_COMBINATIONS gcc ON gjl.code_combination_id = gcc.code_combination_id
+    ORDER BY o.header_id, i.customer_trx_id
+    LIMIT %s
+    """
+    rows = run_sql_v2(sql, (limit,))
+    nodes = {}
+    edges = []
+    for r in rows:
+        cid = f"CustomerAccount:{r['customer_id']}"
+        oid = f"SalesOrder:{r['order_id']}"
+        iid = f"Invoice:{r['invoice_id']}"
+        xid = f"SubledgerEntry:{r['ae_header_id']}"
+        jid = f"JournalEntry:{r['je_header_id']}"
+        gid = f"GLAccount:{r['code_combination_id']}"
+        nodes[cid] = {'id': cid, 'label': 'CustomerAccount', 'name': r['customer_name'], 'props': {'customer_id': r['customer_id'], 'name': r['customer_name']}}
+        nodes[oid] = {'id': oid, 'label': 'SalesOrder', 'name': r['order_number'], 'props': {'order_id': r['order_id'], 'order_number': r['order_number']}}
+        nodes[iid] = {'id': iid, 'label': 'Invoice', 'name': r['trx_number'], 'props': {'invoice_id': r['invoice_id'], 'trx_number': r['trx_number']}}
+        nodes[xid] = {'id': xid, 'label': 'SubledgerEntry', 'name': str(r['ae_header_id']), 'props': {'ae_header_id': r['ae_header_id']}}
+        nodes[jid] = {'id': jid, 'label': 'JournalEntry', 'name': str(r['je_header_id']), 'props': {'je_header_id': r['je_header_id']}}
+        nodes[gid] = {'id': gid, 'label': 'GLAccount', 'name': r['gl_account'], 'props': {'code_combination_id': r['code_combination_id'], 'gl_account': r['gl_account']}}
+        edges.extend([
+            {'source': cid, 'target': oid, 'type': 'PLACED_ORDER'},
+            {'source': oid, 'target': iid, 'type': 'BILLED_AS'},
+            {'source': iid, 'target': xid, 'type': 'ACCOUNTED_AS'},
+            {'source': xid, 'target': jid, 'type': 'POSTED_TO'},
+            {'source': jid, 'target': gid, 'type': 'HITS_ACCOUNT'},
+        ])
+    dedup_edges = []
+    seen = set()
+    for e in edges:
+        k = (e['source'], e['target'], e['type'])
+        if k not in seen:
+            seen.add(k)
+            dedup_edges.append(e)
+    return {'nodes': list(nodes.values()), 'edges': dedup_edges}
+
