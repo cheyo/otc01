@@ -189,3 +189,142 @@ async def get_customer(customer_id: int):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# Import LLM modules
+try:
+    from app.llm.intent_classifier import classify_intent
+    from app.llm.response_generator import generate_response
+    LLM_AVAILABLE = True
+except ImportError:
+    LLM_AVAILABLE = False
+
+class NaturalLanguageQuery(BaseModel):
+    query: str
+
+class NLQueryResult(BaseModel):
+    success: bool
+    intent: Optional[str]
+    confidence: float
+    description: str
+    data: List[Dict[str, Any]]
+    natural_response: str
+    suggestions: List[str]
+
+@app.post("/query/natural", response_model=NLQueryResult)
+async def query_natural(request: NaturalLanguageQuery):
+    """
+    自然语言查询接口
+    将用户自然语言输入转换为风险查询并返回结果
+    """
+    if not LLM_AVAILABLE:
+        raise HTTPException(status_code=503, detail="LLM module not available")
+    
+    user_input = request.query
+    
+    # Step 1: 意图识别
+    intent_result = classify_intent(user_input)
+    intent = intent_result["intent"]
+    confidence = intent_result["confidence"]
+    parameters = intent_result["parameters"]
+    suggestions = intent_result["suggestions"]
+    
+    if not intent:
+        return NLQueryResult(
+            success=False,
+            intent=None,
+            confidence=confidence,
+            description="未能识别查询意图",
+            data=[],
+            natural_response="抱歉，我理解不了您的查询。请尝试以下查询类型：" + ", ".join(suggestions[:5]),
+            suggestions=suggestions
+        )
+    
+    # Step 2: 执行查询
+    if intent not in RISK_QUERIES:
+        return NLQueryResult(
+            success=False,
+            intent=intent,
+            confidence=confidence,
+            description="查询类型暂不支持",
+            data=[],
+            natural_response="该查询类型暂不支持，请选择其他查询。",
+            suggestions=list(RISK_QUERIES.keys())
+        )
+    
+    query = RISK_QUERIES[intent]
+    cypher_params = {"limit": parameters.get("limit", 20)}
+    
+    if intent == "high_overdue":
+        cypher_params["min_days"] = parameters.get("min_days", 90)
+    elif intent == "high_discount":
+        cypher_params["min_discount"] = parameters.get("min_discount", 20)
+    elif intent == "customer_journey":
+        cypher_params["customer_id"] = parameters.get("customer_id", 300000001)
+    
+    try:
+        result_data = run_cypher(query, cypher_params)
+        
+        # Step 3: 生成自然语言响应
+        natural_response = generate_response(intent, result_data, parameters)
+        
+        return NLQueryResult(
+            success=True,
+            intent=intent,
+            confidence=confidence,
+            description=intent_result.get("description", ""),
+            data=result_data,
+            natural_response=natural_response,
+            suggestions=[]
+        )
+        
+    except Exception as e:
+        return NLQueryResult(
+            success=False,
+            intent=intent,
+            confidence=confidence,
+            description="查询执行失败",
+            data=[],
+            natural_response=f"查询执行出错: {str(e)}",
+            suggestions=[]
+        )
+
+@app.get("/query/intents")
+async def list_intents():
+    """列出所有支持的查询意图"""
+    return {
+        "intents": [
+            {"key": k, "description": v.get("description", ""), "keywords": v.get("keywords", [])}
+            for k, v in INTENT_KEYWORDS.items()
+        ]
+    }
+
+
+@app.get("/graph/overview")
+async def graph_overview(limit: int = 80):
+    cypher = """
+    MATCH (a:CustomerAccount)-[:SHARES_BANK_ACCOUNT_WITH]-(b:CustomerAccount)
+    OPTIONAL MATCH (a)-[:USES_BANK_ACCOUNT]->(ba:BankAccount)
+    WITH collect(DISTINCT a) + collect(DISTINCT b) + collect(DISTINCT ba) AS ns
+    UNWIND ns AS n
+    WITH collect(DISTINCT n)[0..$limit] AS nodes
+    UNWIND nodes AS n
+    OPTIONAL MATCH (n)-[r]-(m)
+    WHERE m IN nodes
+    RETURN collect(DISTINCT {
+      id: coalesce(n.cust_account_id, n.bank_account_id, n.party_id, n.customer_trx_id, n.line_id, n.header_id, n.payment_schedule_id, n.cash_receipt_id, n.employee_id, n.location_id, n.credit_profile_id),
+      label: labels(n)[0],
+      name: coalesce(n.account_name, n.bank_name, n.party_name, n.order_number, n.trx_number, n.employee_name, n.address_line1, toString(coalesce(n.cust_account_id, n.bank_account_id, n.party_id))),
+      props: properties(n)
+    }) AS nodes,
+    collect(DISTINCT CASE WHEN r IS NULL THEN NULL ELSE {
+      source: coalesce(startNode(r).cust_account_id, startNode(r).bank_account_id, startNode(r).party_id, startNode(r).customer_trx_id, startNode(r).line_id, startNode(r).header_id, startNode(r).payment_schedule_id, startNode(r).cash_receipt_id, startNode(r).employee_id, startNode(r).location_id, startNode(r).credit_profile_id),
+      target: coalesce(endNode(r).cust_account_id, endNode(r).bank_account_id, endNode(r).party_id, endNode(r).customer_trx_id, endNode(r).line_id, endNode(r).header_id, endNode(r).payment_schedule_id, endNode(r).cash_receipt_id, endNode(r).employee_id, endNode(r).location_id, endNode(r).credit_profile_id),
+      type: type(r)
+    } END) AS rels
+    """
+    result = run_cypher(cypher, {"limit": limit})
+    if not result:
+        return {"nodes": [], "edges": []}
+    row = result[0]
+    edges = [r for r in row.get("rels", []) if r]
+    return {"nodes": row.get("nodes", []), "edges": edges}
